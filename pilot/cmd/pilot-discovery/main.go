@@ -68,6 +68,7 @@ var (
 			}
 
 			// Create the server for the discovery service.
+			// 学习并进行注释
 			discoveryServer, err := bootstrap.NewServer(serverArgs)
 			if err != nil {
 				return fmt.Errorf("failed to create discovery service: %v", err)
