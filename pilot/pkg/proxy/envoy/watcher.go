@@ -16,24 +16,22 @@ package envoy
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
-	"hash"
-	"io/ioutil"
 	"os"
 	"os/exec"
-	"path"
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/duration"
-	"github.com/howeyc/fsnotify"
-
 	meshconfig "istio.io/api/mesh/v1alpha1"
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/proxy"
-	"istio.io/istio/pkg/bootstrap"
 	"istio.io/istio/pkg/log"
+	"crypto/sha256"
+	"github.com/howeyc/fsnotify"
+	"hash"
+	"path"
+	"io/ioutil"
+	"fmt"
 )
 
 const (
@@ -100,9 +98,15 @@ const (
 
 func (w *watcher) Run(ctx context.Context) {
 	// agent consumes notifications from the controller
+	// 启动了Envoy
 	go w.agent.Run(ctx)
 
 	// kickstart the proxy with partial state (in case there are no notifications coming)
+	/*
+	会调用agent.ScheduleConfigUpdate，这个方法只是简单地往configCh里写一个新的配置，
+	所谓的配置是所有certificate算出的sha256哈希值,
+	configCh的这个事件会被agent.Run监控到，然后调用agent.reconcile
+	 */
 	w.Reload()
 
 	// monitor certificates
@@ -111,7 +115,9 @@ func (w *watcher) Run(ctx context.Context) {
 		certDirs = append(certDirs, cert.Directory)
 	}
 
+	// 如果证书文件发生变化，则调用ScheduleConfigUpdate来reload envoy
 	go watchCerts(ctx, certDirs, watchFileEvents, defaultMinDelay, w.Reload)
+	// 则调用ScheduleConfigUpdate来reload envoy（初始的时候运行一次，在envoy生命周期az不会改变）
 	go w.retrieveAZ(ctx, azRetryInterval, azRetryAttempts)
 
 	<-ctx.Done()

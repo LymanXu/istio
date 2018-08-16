@@ -126,6 +126,11 @@ var (
 
 			log.Infof("Proxy role: %#v", role)
 
+			/*
+			Envoy的配置(启动命令行配置)对象为ProxyConfig，
+			init方法为pilot-agent二进制的命令行配置大量的flag与flag默认值，
+			proxy命令处理流程的前半部分将这些flag组装成为ProxyConfig
+			 */
 			proxyConfig := meshconfig.ProxyConfig{}
 
 			// set all flags
@@ -204,6 +209,13 @@ var (
 
 			log.Infof("Monitored certs: %#v", certs)
 
+			/*
+			指定customConfigFile，那么就用customConfigFile
+			没指定customConfigFile却指定templateFile，使用模板自动生成customConfigFile，
+			都没指定，则调用pilot/pkg包下的bootstrap_config.go中的WriteBootstrap自动生成一个配置文件，
+			WriteBootstrap在envoy.Run方法中被调用
+			 */
+
 			if templateFile != "" && proxyConfig.CustomConfigFile == "" {
 				opts := make(map[string]string)
 				opts["PodName"] = os.Getenv("POD_NAME")
@@ -237,6 +249,7 @@ var (
 			}
 
 			envoyProxy := envoy.NewProxy(proxyConfig, role.ServiceNode(), proxyLogLevel, pilotSAN)
+			// 管理Envoy启动和清理
 			agent := proxy.NewAgent(envoyProxy, proxy.DefaultRetry)
 			watcher := envoy.NewWatcher(proxyConfig, agent, role, certs, pilotSAN)
 			ctx, cancel := context.WithCancel(context.Background())

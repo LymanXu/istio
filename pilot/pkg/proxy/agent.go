@@ -182,6 +182,7 @@ func (a *agent) Run(ctx context.Context) {
 		}
 
 		select {
+		// 配置文件，主要是那些证书文件发生变化，则调用agent.reconcile来reload envoy
 		case config := <-a.configCh:
 			if !reflect.DeepEqual(a.desiredConfig, config) {
 				log.Infof("Received new config, resetting budget")
@@ -189,6 +190,7 @@ func (a *agent) Run(ctx context.Context) {
 
 				// reset retry budget if and only if the desired config changes
 				a.retry.budget = a.retry.MaxRetries
+				// 用来来reload envoy
 				a.reconcile()
 			}
 
