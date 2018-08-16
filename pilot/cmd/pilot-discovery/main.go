@@ -48,6 +48,15 @@ var (
 		SilenceUsage: true,
 	}
 
+	/*
+	在数据平面部分分析了通过Envoy动态配置的方式进行转发需要实现Envoy定义的xDS接口，
+	以及在Pilot中为Envoy提供配置信息的grpc server端接口的实现
+	pilot-discovery做的就是这部分工作，具体为
+	1. 从Kubernetes apiserver list/watch service、endpoint、pod、node等资源信息，
+	监听istio控制平面配置信息RouteRule,VirtualService、Gateway、EgressRule...（在k8s环境下存储在k8s api server）
+	2. 翻译为Envoy可以直接理解的配置格式，通过xds提供给Envoy查询
+	 */
+
 	discoveryCmd = &cobra.Command{
 		Use:   "discovery",
 		Short: "Start Istio proxy discovery service",
@@ -68,13 +77,14 @@ var (
 			}
 
 			// Create the server for the discovery service.
-			// 学习并进行注释
+			// 创建Server提供上述的功能，这里没有运行起来，只是搭建处理框架
 			discoveryServer, err := bootstrap.NewServer(serverArgs)
 			if err != nil {
 				return fmt.Errorf("failed to create discovery service: %v", err)
 			}
 
 			// Start the server
+			// 统一启动服务Run()方法
 			_, err = discoveryServer.Start(stop)
 			if err != nil {
 				return fmt.Errorf("failed to start discovery service: %v", err)

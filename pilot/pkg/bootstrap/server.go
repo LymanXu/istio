@@ -193,6 +193,7 @@ type Server struct {
 	mux              *http.ServeMux
 }
 
+// 看出来KubeClient是对K8s api各个接口的封装，从而可以拿到K8s中相关的信息
 func createInterface(kubeconfig string) (kubernetes.Interface, error) {
 	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 
@@ -219,9 +220,16 @@ func NewServer(args PilotArgs) (*Server, error) {
 	s := &Server{}
 
 	// Apply the arguments to the configuration.
+	// KubeClient是对K8s api各个接口的封装，从而可以拿到K8s中相关的信息
 	if err := s.initKubeClient(&args); err != nil {
 		return nil, err
 	}
+	/*
+	一个istio control plane来管理跨多个Kubernetes集群上的service mesh
+	1. Istio控制平面组件运行的k8s是本地cluster
+	2. 控制平面还连接的其他ks8是远程cluster
+	这个功能成熟度还不够
+	 */
 	if err := s.initClusterRegistries(&args); err != nil {
 		return nil, err
 	}
@@ -231,14 +239,23 @@ func NewServer(args PilotArgs) (*Server, error) {
 	if err := s.initMixerSan(&args); err != nil {
 		return nil, err
 	}
-	// 在阅读源码中没有看到哪里对控制面config信息做了监听处理
+	/*
+	在istio中对discovery有两种输入信息，
+	1. 使用istioctl配置的VirtualService、DestinationRule等被称为configuration，
+	2. 而从Kubernetes等服务注册中心获取的信息被称为service信息。
+	所以从名称看ConfigStoreCache、IstioConfigStore负责处理第一类信息，ServiceController负责第二类
+	 */
+	 // 对Istio的RouteRule、VirtualService...资源搭建监听处理框架
+	 // （是保存在配置中心ConfigStore内，有两种形式的config store,文件和k8s api server(使用的这种)）
 	if err := s.initConfigController(&args); err != nil {
 		return nil, err
 	}
-	// 看到后面监听K8s资源变更注册的事件handler
+	// 对K8s中的service，endpoints, node和pod资源搭建监听处理框架
 	if err := s.initServiceControllers(&args); err != nil {
 		return nil, err
 	}
+	// 上面configcontroller,serviceController对queue中Task的handler方法没有定义
+	// 这里对handler提供定义，并提供DiscoveryService
 	if err := s.initDiscoveryService(&args); err != nil {
 		return nil, err
 	}
@@ -506,6 +523,15 @@ func (s *Server) initConfigController(args *PilotArgs) error {
 	}
 
 	// Defer starting the controller until after the service is created.
+	/*
+	事件处理框架都定义好了，那下一步就是要他运行起来，
+	把需要启动的函数Func加入到server的StartFunc列表中，等待统一启动
+
+	主循环：
+	1. 对CRD资源的list/watch，为每种CRD资源的Add、Update、Delete事件创建处理统一的流程
+	（将Add、Update、Delete事件涉及到的CRD资源对象封装为一个Task对象，并将之push到config controller的queue）
+	2. queue.run，处理方法是调用每个从queue中取出的Task对象上的ChainHandler
+	*/
 	s.addStartFunc(func(stop chan struct{}) error {
 		go s.configController.Run(stop)
 		return nil
@@ -550,10 +576,12 @@ func (s *Server) makeKubeConfigController(args *PilotArgs) (model.ConfigStoreCac
 		return nil, multierror.Prefix(err, "failed to open a config client.")
 	}
 
+	// 完成了RouteRule、VirtualService等CRD资源在Kubernetes apiserver上的注册
 	if err = configClient.RegisterResources(); err != nil {
 		return nil, multierror.Prefix(err, "failed to register custom resources.")
 	}
 
+	// 搭建CRD资源对象处理的框架
 	return crd.NewController(configClient, args.Config.ControllerOptions), nil
 }
 
@@ -733,6 +761,15 @@ func (s *Server) initServiceControllers(args *PilotArgs) error {
 	s.ServiceController = serviceControllers
 
 	// Defer running of the service controllers.
+	/*
+	主循环：
+	1. 对K8s资源的(service，endpoints, node和pod)list/watch，为每种CRD资源的Add、Update、Delete事件创建处理统一的流程
+	（将Add、Update、Delete事件涉及到的CRD资源对象封装为一个Task对象，并将之push到config controller的queue）
+	2. queue.run，处理方法是调用每个从queue中取出的Task对象上的ChainHandler
+
+	只是搭建了服务注册信息变更事件的处理框架，
+	真正服务注册变更事件的处理逻辑要等到下面在discovery service中将相应的handler注册到ChainHandler当中
+	 */
 	s.addStartFunc(func(stop chan struct{}) error {
 		go s.ServiceController.Run(stop)
 		return nil
@@ -792,6 +829,7 @@ func (s *Server) initDiscoveryService(args *PilotArgs) error {
 	}
 
 	// Set up discovery service
+	// 在new DiscoveryService的过程中对前面Queue中的handler处理append了处理方法
 	discovery, err := envoy.NewDiscoveryService(
 		s.ServiceController,
 		s.configController,

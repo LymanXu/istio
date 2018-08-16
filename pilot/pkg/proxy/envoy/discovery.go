@@ -360,7 +360,11 @@ func NewDiscoveryService(ctl model.Controller, configCache model.ConfigStoreCach
 
 	// Flush cached discovery responses whenever services, service
 	// instances, or routing configuration changes.
+	// 当service/service instances/routing配置改变时，刷新缓存discovery responses
 	serviceHandler := func(*model.Service, model.Event) { out.clearCache() }
+
+	// pkg/serviceregistry/aggregate/controller.go中
+	// 将serviceHandler加入到每种资源类型的处理方法handler列表中
 	if err := ctl.AppendServiceHandler(serviceHandler); err != nil {
 		return nil, err
 	}

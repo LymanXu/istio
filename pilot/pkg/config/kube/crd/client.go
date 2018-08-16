@@ -84,6 +84,7 @@ type restClient struct {
 }
 
 func apiVersion(schema *model.ProtoSchema) string {
+	// schema.Group + '.istio.io' + '/'+ 具体资源配置中定义的version
 	return ResourceGroup(schema) + "/" + schema.Version
 }
 
@@ -92,6 +93,7 @@ func apiVersionFromConfig(config *model.Config) string {
 }
 
 func newClientSet(descriptor model.ConfigDescriptor) (map[string]*restClient, error) {
+	// 初始化clientSet集合，通过Map的方式维持每种资源Type与
 	cs := make(map[string]*restClient)
 	for _, typ := range descriptor {
 		s, exists := knownTypes[typ.Type]
@@ -100,6 +102,9 @@ func newClientSet(descriptor model.ConfigDescriptor) (map[string]*restClient, er
 		}
 
 		rc, ok := cs[apiVersion(&typ)]
+		// 为group name + schma version组成的Key定义RestClient
+		// RestClient中的定义也可以看到维持一个支持的资源类型的数组
+		// types []*schemaType
 		if !ok {
 			// create a new client if one doesn't already exist
 			rc = &restClient{
@@ -122,6 +127,7 @@ func (rc *restClient) init(kubeconfig string, context string) error {
 		return err
 	}
 
+	// 实例化dynamic，httpclient
 	dynamic, err := rest.RESTClientFor(cfg)
 	if err != nil {
 		return err
@@ -164,6 +170,10 @@ func (rc *restClient) createRESTConfig(kubeconfig string, context string) (confi
 // If the kubeconfig file is empty, defaults to in-cluster config as well.
 // You can also choose a config context by providing the desired context name.
 func NewClient(config string, context string, descriptor model.ConfigDescriptor, domainSuffix string) (*Client, error) {
+	// 1.   desciptor中包含model.RouteRule,
+	//		model.VirtualService,
+	//		model.Gateway...这些资源的定义
+	// 2. newClientSet做的是初始化ClientSet对每个client中的dynamic *rest.RESTClient没有初始化
 	cs, err := newClientSet(descriptor)
 	if err != nil {
 		return nil, err
@@ -174,6 +184,7 @@ func NewClient(config string, context string, descriptor model.ConfigDescriptor,
 		domainSuffix: domainSuffix,
 	}
 
+	// 初始化每个client中的dynamic *rest.RESTClient没有初始化
 	for _, v := range out.clientset {
 		if err := v.init(config, context); err != nil {
 			return nil, err
@@ -200,6 +211,7 @@ func (rc *restClient) registerResources() error {
 		return err
 	}
 
+	// 为每个REST client注册资源
 	skipCreate := true
 	for _, schema := range rc.descriptor {
 		name := ResourceName(schema.Plural) + "." + ResourceGroup(&schema)
@@ -236,6 +248,8 @@ func (rc *restClient) registerResources() error {
 		if schema.ClusterScoped {
 			crdScope = apiextensionsv1beta1.ClusterScoped
 		}
+		// a resource that should be exposed on the API server
+		// 这段的逻辑应该和k8s api server提供外部访问接口，需要实现的代码模块有关
 		crd := &apiextensionsv1beta1.CustomResourceDefinition{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: name,

@@ -169,6 +169,7 @@ func (c *Controller) notify(obj interface{}, event model.Event) error {
 // Used for Service, Endpoint, Node and Pod.
 // See config/kube for CRD events.
 // See config/ingress for Ingress objects
+// 监听K8s中这些资源的变动情况
 func (c *Controller) createInformer(
 	o runtime.Object,
 	otype string,

@@ -104,12 +104,14 @@ func (q *queueImpl) Run(stop <-chan struct{}) {
 		rateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(rateLimit), 10*rateLimit)
 	}
 
+	// 上面部分通过令牌桶算法控制accepte速率
 	var item Task
 	for {
 		if rateLimit > 0 {
 			rateLimiter.Accept()
 		}
 
+		// 对queue进行取出时加锁处理
 		q.lock.Lock()
 		if q.closing {
 			q.lock.Unlock()
@@ -119,6 +121,7 @@ func (q *queueImpl) Run(stop <-chan struct{}) {
 		} else {
 			item, q.queue = q.queue[0], q.queue[1:]
 			q.lock.Unlock()
+			// 取出元素后释放锁，调用task中注册的handler进行处理
 
 			for {
 				err := item.handler(item.obj, item.event)

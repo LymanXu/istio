@@ -74,12 +74,22 @@ func NewController(client *Client, options kube.ControllerOptions) model.ConfigS
 
 	// Queue requires a time duration for a retry delay after a handler error
 	out := &controller{
+		// 第一步创建的configClient访问K8s api server的接口
 		client: client,
+		// queue缓存CRD资源的Add/Update/Delete事件封装成的Task
 		queue:  kube.NewQueue(1 * time.Second),
+		// cacheHandler中包括informer和相应的handler（function[]）
 		kinds:  make(map[string]cacheHandler),
 	}
 
 	// add stores for CRD kinds
+	/*
+	添加informer中实现对CRD资源的list/watch，
+	为每种CRD资源的Add、Update、Delete事件创建处理统一的流程框架，
+	不过对于cachehandler里面并没有加入实质的处理函数，
+
+	真正CRD变更事件的处理逻辑要等到下面在discovery service中将相应的handler注册到ChainHandler当中
+	*/
 	for _, schema := range client.ConfigDescriptor() {
 		out.addInformer(schema, options.WatchedNamespace, options.ResyncPeriod)
 	}
@@ -89,6 +99,7 @@ func NewController(client *Client, options kube.ControllerOptions) model.ConfigS
 
 func (c *controller) addInformer(schema model.ProtoSchema, namespace string, resyncPeriod time.Duration) {
 	c.kinds[schema.Type] = c.createInformer(knownTypes[schema.Type].object.DeepCopyObject(), schema.Type, resyncPeriod,
+		//		// ListFunc的定义，通过之前定义configClient提供K8s api server访问的接口
 		func(opts meta_v1.ListOptions) (result runtime.Object, err error) {
 			result = knownTypes[schema.Type].collection.DeepCopyObject()
 			rc, ok := c.client.clientset[apiVersion(&schema)]
@@ -105,6 +116,7 @@ func (c *controller) addInformer(schema model.ProtoSchema, namespace string, res
 			err = req.Do().Into(result)
 			return
 		},
+		// watchFunc的定义
 		func(opts meta_v1.ListOptions) (watch.Interface, error) {
 			rc, ok := c.client.clientset[apiVersion(&schema)]
 			if !ok {
@@ -144,10 +156,12 @@ func (c *controller) createInformer(
 	handler.Append(c.notify)
 
 	// TODO: finer-grained index (perf)
+	// client-go库里的SharedIndexInformer实现对CRD资源的list/watch
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{ListFunc: lf, WatchFunc: wf}, o,
 		resyncPeriod, cache.Indexers{})
 
+	// 为每种CRD资源的Add、Update、Delete事件创建处理统一的流程框架
 	informer.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			// TODO: filtering functions to skip over un-referenced resources (perf)
