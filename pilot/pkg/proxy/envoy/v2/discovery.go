@@ -15,17 +15,11 @@
 package v2
 
 import (
-	"os"
 	"sync"
 	"time"
 
-	xdsapi "github.com/envoyproxy/go-control-plane/envoy/api/v2"
-	ads "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v2"
+	"os"
 	"google.golang.org/grpc"
-
-	networking "istio.io/api/networking/v1alpha3"
-	"istio.io/istio/pilot/pkg/model"
-	"istio.io/istio/pilot/pkg/networking/core"
 )
 
 var (
@@ -54,6 +48,12 @@ const (
 )
 
 // DiscoveryServer is Pilot's gRPC implementation for Envoy's v2 xds APIs
+/*
+DiscoveryService服务端的gRPC实现，在bootstrap/server.go:initDiscoveryService中
+会调用s.EnvoyXdsServer = envoyv2.NewDiscoveryServer（就是下面定义的method）
+[Notice] 对gRPC接口的实现（StreamAggregatedResources）在ads.go中
+*/
+
 type DiscoveryServer struct {
 	// env is the model environment.
 	env model.Environment

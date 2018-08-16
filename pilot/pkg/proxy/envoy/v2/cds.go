@@ -46,6 +46,8 @@ func (con *XdsConnection) clusters(response []*xdsapi.Cluster) *xdsapi.Discovery
 
 func (s *DiscoveryServer) pushCds(con *XdsConnection) error {
 	// TODO: Modify interface to take services, and config instead of making library query registry
+	// 这里最终去调用s.env.Service，s.env是存储了s.istioConfigStore,s.ServiceController结构体,
+	// 所以会调用这些下面具体的实现
 	rawClusters, err := s.ConfigGenerator.BuildClusters(s.env, *con.modelNode)
 	if err != nil {
 		adsLog.Warnf("CDS: Failed to generate clusters for node %s: %v", con.modelNode, err)

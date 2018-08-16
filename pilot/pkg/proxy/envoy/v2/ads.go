@@ -300,6 +300,12 @@ func receiveThread(con *XdsConnection, reqChannel chan *xdsapi.DiscoveryRequest,
 }
 
 // StreamAggregatedResources implements the ADS interface.
+/*
+gRPC Server端接口的实现StreamAggregatedResources，
+对于每种类型的资源会调用相应的pushXX，在同目录下的其他对应资源.go中定义
+
+例如，pushCds在cds.go
+ */
 func (s *DiscoveryServer) StreamAggregatedResources(stream ads.AggregatedDiscoveryService_StreamAggregatedResourcesServer) error {
 	peerInfo, ok := peer.FromContext(stream.Context())
 	peerAddr := "0.0.0.0"

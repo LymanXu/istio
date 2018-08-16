@@ -231,9 +231,11 @@ func NewServer(args PilotArgs) (*Server, error) {
 	if err := s.initMixerSan(&args); err != nil {
 		return nil, err
 	}
+	// 在阅读源码中没有看到哪里对控制面config信息做了监听处理
 	if err := s.initConfigController(&args); err != nil {
 		return nil, err
 	}
+	// 看到后面监听K8s资源变更注册的事件handler
 	if err := s.initServiceControllers(&args); err != nil {
 		return nil, err
 	}
@@ -471,6 +473,8 @@ func (c *mockController) Run(<-chan struct{}) {}
 
 // initConfigController creates the config controller in the pilotConfig.
 func (s *Server) initConfigController(args *PilotArgs) error {
+	// 1. 注册K8s CRD资源
+	// 2. 搭建对CRD资源的CRUD框架
 	if args.Config.Controller != nil {
 		s.configController = args.Config.Controller
 	} else if args.Config.FileDir != "" {
@@ -491,6 +495,8 @@ func (s *Server) initConfigController(args *PilotArgs) error {
 
 		s.configController = configController
 	} else {
+		// config.FileDir默认为空
+		// 1. 初始化ConfigClient 2. 注册相关资源 3. New Controller
 		controller, err := s.makeKubeConfigController(args)
 		if err != nil {
 			return err
@@ -538,6 +544,7 @@ func (s *Server) initConfigController(args *PilotArgs) error {
 
 func (s *Server) makeKubeConfigController(args *PilotArgs) (model.ConfigStoreCache, error) {
 	kubeCfgFile := s.getKubeCfgFile(args)
+	// ConfigDescriptor中定义资源的集合
 	configClient, err := crd.NewClient(kubeCfgFile, "", ConfigDescriptor, args.Config.ControllerOptions.DomainSuffix)
 	if err != nil {
 		return nil, multierror.Prefix(err, "failed to open a config client.")
@@ -592,6 +599,7 @@ func (s *Server) makeCopilotMonitor(args *PilotArgs, configController model.Conf
 func (s *Server) createK8sServiceControllers(serviceControllers *aggregate.Controller, args *PilotArgs) (err error) {
 	clusterID := string(serviceregistry.KubernetesRegistry)
 	log.Infof("Primary Cluster name: %s", clusterID)
+	//
 	kubectl := kube.NewController(s.kubeClient, args.Config.ControllerOptions)
 	serviceControllers.AddRegistry(
 		aggregate.Registry{
@@ -774,6 +782,7 @@ func (s *Server) initConfigRegistry(serviceControllers *aggregate.Controller) {
 }
 
 func (s *Server) initDiscoveryService(args *PilotArgs) error {
+	// 在environment已经构建完成对config/K8s资源监听的接口和对应的事件handler
 	environment := model.Environment{
 		Mesh:             s.mesh,
 		IstioConfigStore: s.istioConfigStore,
@@ -797,11 +806,14 @@ func (s *Server) initDiscoveryService(args *PilotArgs) error {
 	s.mux = s.discoveryService.RestContainer.ServeMux
 
 	// For now we create the gRPC server sourcing data from Pilot's older data model.
+	// 下面这段Grpc的逻辑是使用grpc的模板，具体可以参考grpc相关知识
 	s.initGrpcServer()
 
+	// 实例化gRPC的Server
 	s.EnvoyXdsServer = envoyv2.NewDiscoveryServer(environment, istio_networking.NewConfigGenerator(args.Plugins))
 	// TODO: decouple v2 from the cache invalidation, use direct listeners.
 	envoy.V2ClearCache = s.EnvoyXdsServer.ClearCacheFunc()
+	// 将eds和ads进行注册
 	s.EnvoyXdsServer.Register(s.grpcServer)
 
 	s.EnvoyXdsServer.InitDebug(s.mux, s.ServiceController)
