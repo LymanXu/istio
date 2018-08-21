@@ -85,6 +85,7 @@ func serverCmd(info map[string]template.Info, adapters []adapter.InfoFn, printf,
 func runServer(sa *server.Args, printf, fatalf shared.FormatFn) {
 	printf("Mixer started with\n%s", sa)
 
+	// 创建 mixer server
 	s, err := server.New(sa)
 	if err != nil {
 		fatalf("Unable to initialize Mixer: %v", err)
@@ -93,6 +94,7 @@ func runServer(sa *server.Args, printf, fatalf shared.FormatFn) {
 	printf("Istio Mixer: %s", version.Info)
 	printf("Starting gRPC server on port %v", sa.APIPort)
 
+	// 下面启动运行
 	s.Run()
 	err = s.Wait()
 	if err != nil {

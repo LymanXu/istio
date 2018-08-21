@@ -37,6 +37,7 @@ type work struct {
 // NewGoroutinePool creates a new pool of goroutines to schedule async work.
 func NewGoroutinePool(queueDepth int, singleThreaded bool) *GoroutinePool {
 	gp := &GoroutinePool{
+		// go 中chan理解为阻塞消息队列，用于不同goroutine之间消息传递
 		queue:          make(chan work, queueDepth),
 		singleThreaded: singleThreaded,
 	}

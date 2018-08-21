@@ -46,6 +46,7 @@ func GetRootCmd(args []string, info map[string]template.Info, adapters []adapter
 	rootCmd.SetArgs(args)
 	rootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 
+	// 添加子命令
 	rootCmd.AddCommand(serverCmd(info, adapters, printf, fatalf))
 	rootCmd.AddCommand(crdCmd(info, adapters, printf, fatalf))
 	rootCmd.AddCommand(probeCmd(printf, fatalf))

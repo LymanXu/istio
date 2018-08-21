@@ -104,12 +104,24 @@ func newServer(a *Args, p *patchTable) (*Server, error) {
 	adapterPoolSize := a.AdapterWorkerPoolSize
 
 	s := &Server{}
+	/*
+	初始化 api进程池
+	SingleThreaded: If true, each request to Mixer will be executed in a single go routine
+	(useful for debugging)
+	 */
 	s.gp = pool.NewGoroutinePool(apiPoolSize, a.SingleThreaded)
 	s.gp.AddWorkers(apiPoolSize)
 
+	/*
+	初始化Adapter线程池，多个线程去处理queue中的任务
+	queue是通过go 中的chan声明的，可以看做阻塞队列，用于多个goroutine之间的消息同步
+	 */
 	s.adapterGP = pool.NewGoroutinePool(adapterPoolSize, a.SingleThreaded)
 	s.adapterGP.AddWorkers(adapterPoolSize)
 
+	/*
+	template模板定义了attributes到adapter输入数据映射格式
+	 */
 	tmplRepo := template.NewRepository(a.Templates)
 	adapterMap := config.AdapterInfoMap(a.Adapters, tmplRepo.SupportsTemplate)
 
@@ -187,6 +199,9 @@ func newServer(a *Args, p *patchTable) (*Server, error) {
 		templateMap[k] = &t
 	}
 
+	/*
+	监听配置变更，配置变更会构造新的handler和dispatcher
+	 */
 	rt = p.newRuntime(st, templateMap, adapterMap, a.ConfigDefaultNamespace,
 		s.gp, s.adapterGP, a.TracingOptions.TracingEnabled())
 
@@ -202,6 +217,9 @@ func newServer(a *Args, p *patchTable) (*Server, error) {
 
 	// get the grpc server wired up
 	grpc.EnableTracing = a.EnableGRPCTracing
+	/*
+	grpc server端的实现，补充check/report方法
+	 */
 	s.server = grpc.NewServer(grpcOptions...)
 	mixerpb.RegisterMixerServer(s.server, api.NewGRPCServer(s.dispatcher, s.gp, s.checkCache))
 

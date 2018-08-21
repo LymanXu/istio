@@ -67,14 +67,17 @@ func NewGRPCServer(dispatcher dispatcher.Dispatcher, gp *pool.GoroutinePool, cac
 	}
 }
 
+// 执行前置条件的检查和配额管理
 // Check is the entry point for the external Check method
 func (s *grpcServer) Check(ctx context.Context, req *mixerpb.CheckRequest) (*mixerpb.CheckResponse, error) {
 	lg.Debugf("Check (GlobalWordCount:%d, DeduplicationID:%s, Quota:%v)", req.GlobalWordCount, req.DeduplicationId, req.Quotas)
 	lg.Debug("Dispatching Preprocess Check")
 
+	// 构造给予proto的属性包，先根据protoBag在cache中检查
 	// bag around the input proto that keeps track of reference attributes
 	protoBag := attribute.NewProtoBag(&req.Attributes, s.globalDict, s.globalWordList)
 
+	// 首先在缓存中查找检查，没有找到再调用后端基础设施
 	if s.cache != nil {
 		if value, ok := s.cache.Get(protoBag); ok {
 			resp := &mixerpb.CheckResponse{
@@ -102,9 +105,11 @@ func (s *grpcServer) Check(ctx context.Context, req *mixerpb.CheckRequest) (*mix
 		}
 	}
 
+	// 构造checkBag(执行check后会改变)
 	// This holds the output state of preprocess operations
 	checkBag := attribute.GetMutableBag(protoBag)
 
+	// 调用后端检查
 	resp, err := s.check(ctx, req, protoBag, checkBag)
 
 	protoBag.Done()
@@ -154,6 +159,7 @@ func (s *grpcServer) check(ctx context.Context, req *mixerpb.CheckRequest,
 		},
 	}
 
+	// cache中没有，将结果写入到cache
 	if s.cache != nil {
 		// keep this for later...
 		s.cache.Set(protoBag, checkcache.Value{
@@ -208,6 +214,7 @@ func (s *grpcServer) check(ctx context.Context, req *mixerpb.CheckRequest,
 
 var reportResp = &mixerpb.ReportResponse{}
 
+// grpc server端 Report报告遥测数据方法实现
 // Report is the entry point for the external Report method
 func (s *grpcServer) Report(ctx context.Context, req *mixerpb.ReportRequest) (*mixerpb.ReportResponse, error) {
 	lg.Debugf("Report (Count: %d)", len(req.Attributes))

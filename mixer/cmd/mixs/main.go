@@ -34,6 +34,7 @@ func supportedAdapters() []adptr.InfoFn {
 }
 
 func main() {
+	// mixer server部分和Envoy、后端基础设施交互
 	rootCmd := cmd.GetRootCmd(os.Args[1:], supportedTemplates(), supportedAdapters(), shared.Printf, shared.Fatalf)
 
 	if err := rootCmd.Execute(); err != nil {
